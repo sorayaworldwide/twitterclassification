@@ -248,3 +248,140 @@ multi_lasso_rsv3 %>%
   autoplot(type = "heatmap") +
   scale_y_discrete(labels = function(x) str_wrap(x, 20)) +
   scale_x_discrete(labels = function(x) str_wrap(x, 20))
+
+###nugget #3 downsample
+library(themis)
+tweetsvader_recv6 <-
+  recipe(sentiment ~ text,
+         data = tweetsvaderfinal_train) %>%
+  step_tokenize(text) %>%
+  step_tokenfilter(text, max_tokens = 1e3) %>%
+  step_tfidf(text)
+  step_downsample(sentiment)
+##check accuracy
+  tweetsvader_prep<-prep(tweetsvader_recv6)
+juice(tweetsvader_prep)  
+##update workflow
+multi_lasso_wfv6<-workflow()%>%
+  add_recipe(tweetsvader_recv6, blueprint = sparse_bp)%>%
+  add_model(multi_spec)
+## tune
+multi_lasso_rsv6 <-tune_grid(
+  multi_lasso_wfv6,
+  tweetsvader_folds,
+  grid=10,
+  control = control_resamples(save_pred=TRUE)
+)
+multi_lasso_rsv6
+## best acc
+best_accv6<- multi_lasso_rsv6%>%
+  show_best("accuracy")
+best_accv6
+best_acc
+##confusion matrix
+multi_lasso_rsv6 %>%
+  collect_predictions() %>%
+  filter(penalty == best_accv6$penalty) %>%
+  filter(id == "Fold01") %>%
+  conf_mat(sentiment, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  scale_y_discrete(labels = function(x) str_wrap(x, 20)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, 20))
+##redo ngram to include 1 and 2: recv7 bigrams and unigrams 
+tweetsvader_recv7 <-
+  recipe(sentiment ~ text,
+         data = tweetsvaderfinal_train) %>%
+  step_tokenize(text) %>%
+  step_stem (text)%>%
+  step_ngram(text, num_tokens = 2L, min_num_tokens = 1L)%>%
+  step_tokenfilter(text, max_tokens = 1e3) %>%
+  step_tfidf(text) 
+##
+multi_lasso_wfv7<-workflow()%>%
+  add_recipe(tweetsvader_recv7, blueprint = sparse_bp)%>%
+  add_model(multi_spec)
+## tune
+multi_lasso_rsv7 <-tune_grid(
+  multi_lasso_wfv7,
+  tweetsvader_folds,
+  grid=10,
+  control = control_resamples(save_pred=TRUE)
+)
+multi_lasso_rsv7
+## best acc
+best_accv7<- multi_lasso_rsv7%>%
+  show_best("accuracy")
+best_accv7
+##confusion matrix
+multi_lasso_rsv7 %>%
+  collect_predictions() %>%
+  filter(penalty == best_accv7$penalty) %>%
+  filter(id == "Fold01") %>%
+  conf_mat(sentiment, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  scale_y_discrete(labels = function(x) str_wrap(x, 20)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, 20))
+
+###textfeature number of words
+
+tweetsvader_recv8<-
+  recipe(sentiment ~ text, data = tweetsvaderfinal_train)
+
+tweetsvader_recv8 <- tweetsvader_recv8 %>%
+  step_mutate(text_copy = text)%>%
+  step_textfeature(text_copy, extract_functions = nowords)
+
+
+
+tweetsvader_recv8 <- tweetsvader_recv8%>%  
+    step_tokenize(text) %>%
+    step_stem (text)%>%
+    step_tokenfilter(text, max_tokens = 1e3) %>%
+    step_tfidf(text) 
+  
+##customfunction
+install.packages("syn")
+library(syn)
+nowords <-function(text){n_words(text)
+}
+nowords(tweetsvaderfinal_train$text)
+
+##
+multi_lasso_wfv8<-multi_lasso_wf%>%
+  update_recipe(tweetsvader_recv8, blueprint = sparse_bp)
+multi_lasso_wfv8
+## tune
+multi_lasso_rsv8 <-tune_grid(
+  multi_lasso_wfv8,
+  tweetsvader_folds,
+  grid=10,
+  control = control_resamples(save_pred=TRUE)
+)
+multi_lasso_rsv8
+## best acc
+best_accv8<- multi_lasso_rsv8%>%
+  show_best("accuracy")
+best_accv8
+
+
+##VIP
+library(vip)
+##fit bigram/unigram 
+multi_lasso_fitv7 <- multi_lasso_wfv7 %>%
+  fit(data = tweetsvaderfinal_train)
+
+multi_lasso_fitv7
+
+multi_lasso_fitv7 %>%
+  pull_workflow_fit() %>%
+  vip(num_features = 50, geom = "point")
+
+##fit original
+multi_lasso_fit <- multi_lasso_wf %>%
+  fit(data = tweetsvaderfinal_train)
+
+multi_lasso_fit
+
+multi_lasso_fit %>%
+  pull_workflow_fit() %>%
+  vip(num_features = 50, geom = "point")

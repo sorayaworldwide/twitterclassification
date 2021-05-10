@@ -17,6 +17,8 @@ library(reticulate)
 library(quanteda)
 library(paletteer)
 
+ 
+covid_vaccine_education<-search_tweets(q="vaccine covid school", n=5000, lang="en", include_rts=FALSE)
 
 ##read data
 tweetsvader<-read.csv("covidvaxed_cv2.csv")
@@ -76,7 +78,7 @@ tweetsvaderfinal_test <- testing(tweetsvaderfinal_split)
 tweetsvaderfinal_train %>%
   count(sentiment, sort = TRUE) %>%
   select(n, sentiment)
-## imbalanced with positives 557, positive, 376 neutral, 228 negative yay!
+## imbalanced with positives 557, positive, 376 neutral, 228 negative
 
 ## create new 'recipe' or text pre-processing for training
 
@@ -86,12 +88,18 @@ tweetsvader_rec <-
   step_tokenize(text) %>%
   step_tokenfilter(text, max_tokens = 1e3) %>%
   step_tfidf(text) 
+
+tweetsvader_rec
+
 ## cross-validation object
 tweetsvader_folds <- vfold_cv(tweetsvaderfinal_train)
+
 ## multinomial regression object
 multi_spec <- multinom_reg(penalty = tune(), mixture = 1) %>%
   set_mode("classification") %>%
   set_engine("glmnet")
+
+multi_spec
 
 ##sparse bp
 sparse_bp <- default_recipe_blueprint(composition = "dgCMatrix")
@@ -783,15 +791,25 @@ tune_rs <-tune_grid(
   multi_lasso_wfv9,
   tweetsvader_folds,
   grid= 10,
-  metrics = metric_set(accuracy, sensitivity, specificity)
+  metrics = metric_set(accuracy, sensitivity, specificity, kap),
+  control = control_resamples(save_pred = TRUE)
 )
 autoplot(tune_rs)
+
+
+collect_predictions(tune_rs)
+collect_metrics(tune_rs)%>%
+  filter(.metric=="kap")
+
+ 
 
 #choose best accuracy 
 choose_acc <-tune_rs %>%
   select_by_pct_loss(metric="accuracy", -penalty)
 
-choose_acc  
+tune_rs %>%
+  select_by_one_std_err(metric="accuracy", -penalty)
+
 #final workflow
 
 final_wf<-finalize_workflow(multi_lasso_wfv9, choose_acc)
